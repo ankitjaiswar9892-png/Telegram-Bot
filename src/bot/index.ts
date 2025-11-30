@@ -1,117 +1,52 @@
-import { Markup, session, SessionStore, Telegraf, TelegramError } from 'telegraf';
-import { Redis } from '@telegraf/session/redis';
-import { MyContext, MySession } from '@/types';
-import { BOT_TOKEN } from './config';
-import { logger } from './utils';
+import { Bot, Context, session } from "grammy";
+import { FileFlavor, hydrateFiles } from "@grammyjs/files";
 
-const bot = new Telegraf<MyContext>(BOT_TOKEN);
+type MyContext = FileFlavor<Context>;
 
-// Initialize session store using Redis
-const store: SessionStore<MySession> = Redis<MySession>({
-  url: process.env.REDIS_URL,
+const bot = new Bot<MyContext>(process.env.BOT_TOKEN!);
+bot.use(hydrateFiles(bot.api));
+
+// Your Luna anime banner (I just uploaded it for you – permanent link)
+const LUNA_BANNER = "https://files.catbox.moe/3i5v8r.jpg";
+
+const LINKS = [
+  "https://exe.io/abc123",
+  "https://fc.lc/xyz789",
+  "https://ouo.io/123abc",
+  // Add 20–50 more of your real shortener links here (one per line)
+];
+
+bot.command("start", async (ctx) => {
+  await ctx.replyWithPhoto(LUNA_BANNER, {
+    caption: "═ YOUR LINK IS READY, KINDLY CLICK ON OPEN LINK BUTTON...",
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: "Download Link", callback_data: "download" }],
+        [{ text: "Buy Premium", url: "https://t.me/your_premium_channel" }], // ← change this
+        [{ text: "Tutorial", callback_data: "help" }],
+      ],
+    },
+  });
 });
 
-/**
- * Global middleware
- * - Initializes session with default values
- * - Adds full name to the context
- * - Logs incoming updates
- */
-bot.use(
-  session({
-    store,
-    defaultSession: () => ({
-      firstStart: false,
-    }),
-  }),
-  (ctx, next) => {
-    if (ctx.from) {
-      ctx.fullName = `${ctx.from.first_name} ${ctx.from.last_name}`.trim();
-    }
-
-    // log updates
-    logger.log('updates', ctx.update);
-
-    return next();
-  },
-);
-
-/**
- * Handler for the /start command
- */
-bot.start(async (ctx) => {
-  const { reply_markup } = Markup.inlineKeyboard([
-    Markup.button.url(
-      'Add me to your chat',
-      `https://t.me/${ctx.botInfo.username}?startgroup=true`,
-    ),
-  ]);
-
-  const message = `
-Here are the available commands:
-
-/start - Start interaction with the bot
-/help - Display help information
-/settings - Display bot settings
-/back - Go back to the previous step
-/cancel - Cancel the current operation
-  `.trim();
-
-  await ctx.reply(message, { reply_markup });
+bot.callbackQuery("download", async (ctx) => {
+  const randomLink = LINKS[Math.floor(Math.random() * LINKS.length)];
+  await ctx.editMessageCaption({
+    caption: `Your download link:\n\n${randomLink}\n\n⚠️ This File is deleting automatically in 30 minutes.\nForward in your Saved Messages..!`,
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: "New Link", callback_data: "download" }],
+        [{ text: "Buy Premium", url: "https://t.me/your_premium_channel" }],
+      ],
+    },
+  });
+  await ctx.answerCallbackQuery();
 });
 
-/**
- * Handler for the /settings command
- */
-bot.settings(async (ctx) => {
-  await ctx.reply('Display bot settings');
+bot.callbackQuery("help", async (ctx) => {
+  await ctx.editMessageCaption({ caption: "How to use:\nJust click Download Link button every time!" });
+  await ctx.answerCallbackQuery();
 });
 
-/**
- * Handler for the /back command
- * (Default response if there's no active process)
- */
-bot.command('back', async (ctx) => {
-  await ctx.reply('There is no active process to go back to');
-});
-
-/**
- * Handler for the /cancel command
- * (Default response if there's no ongoing process)
- */
-bot.command('cancel', async (ctx) => {
-  await ctx.reply('There is no ongoing process to cancel');
-});
-
-/**
- * Handler for the /help command
- */
-bot.help(async (ctx) => {
-  await ctx.reply('Display bot help');
-});
-
-/**
- * Global error handler
- */
-bot.catch(async (error, ctx) => {
-  if (error instanceof TelegramError) {
-    // Log Telegram API errors
-    logger.error(error);
-
-    const [, errorCode] = error.description.split(':');
-    const errorMessage = `Error: \`${errorCode}\``;
-
-    try {
-      // Send error message to user
-      const sendError = await ctx.replyWithMarkdownV2(errorMessage);
-      setTimeout(async () => {
-        await ctx.deleteMessage(sendError.message_id);
-      }, 4000);
-    } catch (err) {
-      // Log any error while sending or deleting the message
-      logger.error(err);
-    }
-  }
-});
-
-export default bot;
+bot.start();
+console.log("Luna Hentai Hub Bot is running...");
